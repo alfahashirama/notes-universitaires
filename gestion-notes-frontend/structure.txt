@@ -1,0 +1,99 @@
+gestion-notes-frontend/
+├── public/
+│   └── vite.svg
+├── src/
+│   ├── assets/
+│   │   └── logo.svg
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Button.jsx
+│   │   │   ├── Card.jsx
+│   │   │   ├── Input.jsx
+│   │   │   ├── Modal.jsx
+│   │   │   ├── Table.jsx
+│   │   │   ├── Badge.jsx
+│   │   │   ├── Spinner.jsx
+│   │   │   ├── Pagination.jsx
+│   │   │   └── SearchBar.jsx
+│   │   ├── layout/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── Layout.jsx
+│   │   │   └── Footer.jsx
+│   │   ├── auth/
+│   │   │   ├── LoginForm.jsx
+│   │   │   ├── RegisterForm.jsx
+│   │   │   └── PrivateRoute.jsx
+│   │   ├── dashboard/
+│   │   │   ├── StatsCard.jsx
+│   │   │   ├── RecentActivity.jsx
+│   │   │   └── QuickActions.jsx
+│   │   ├── etudiants/
+│   │   │   ├── EtudiantList.jsx
+│   │   │   ├── EtudiantForm.jsx
+│   │   │   └── EtudiantDetails.jsx
+│   │   ├── enseignants/
+│   │   │   ├── EnseignantList.jsx
+│   │   │   ├── EnseignantForm.jsx
+│   │   │   └── EnseignantDetails.jsx
+│   │   ├── matieres/
+│   │   │   ├── MatiereList.jsx
+│   │   │   ├── MatiereForm.jsx
+│   │   │   └── MatiereDetails.jsx
+│   │   ├── notes/
+│   │   │   ├── NoteList.jsx
+│   │   │   ├── NoteForm.jsx
+│   │   │   └── BulkNoteForm.jsx
+│   │   ├── bulletins/
+│   │   │   ├── BulletinEtudiant.jsx
+│   │   │   ├── Classement.jsx
+│   │   │   └── Statistiques.jsx
+│   │   └── departements/
+│   │       ├── DepartementList.jsx
+│   │       └── DepartementForm.jsx
+│   ├── pages/
+│   │   ├── auth/
+│   │   │   ├── Login.jsx
+│   │   │   └── Register.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── Etudiants.jsx
+│   │   ├── Enseignants.jsx
+│   │   ├── Matieres.jsx
+│   │   ├── Notes.jsx
+│   │   ├── Bulletins.jsx
+│   │   ├── Departements.jsx
+│   │   ├── Semestres.jsx
+│   │   ├── AnneesAcademiques.jsx
+│   │   ├── Profile.jsx
+│   │   └── NotFound.jsx
+│   ├── services/
+│   │   ├── api.js
+│   │   ├── authService.js
+│   │   ├── etudiantService.js
+│   │   ├── enseignantService.js
+│   │   ├── matiereService.js
+│   │   ├── noteService.js
+│   │   ├── bulletinService.js
+│   │   └── departementService.js
+│   ├── context/
+│   │   └── AuthContext.jsx
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   ├── useAxios.js
+│   │   └── useLocalStorage.js
+│   ├── utils/
+│   │   ├── constants.js
+│   │   ├── helpers.js
+│   │   └── validators.js
+│   ├── App.jsx
+│   ├── main.jsx
+│   └── index.css
+├── .env
+├── .env.example
+├── .gitignore
+├── index.html
+├── package.json
+├── tailwind.config.js
+├── postcss.config.js
+├── vite.config.js
+└── README.md

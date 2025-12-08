@@ -1,0 +1,37 @@
+gestion-notes-universitaires/
+├── src/
+│   ├── config/
+│   │   └── database.js
+│   ├── models/
+│   │   ├── index.js
+│   │   ├── Etudiant.js
+│   │   ├── Enseignant.js
+│   │   ├── Matiere.js
+│   │   ├── Note.js
+│   │   ├── Semestre.js
+│   │   ├── AnneeAcademique.js
+│   │   └── Departement.js
+│   ├── migrations/
+│   │   └── (fichiers générés automatiquement)
+│   ├── controllers/
+│   │   ├── etudiantController.js
+│   │   ├── enseignantController.js
+│   │   ├── matiereController.js
+│   │   ├── noteController.js
+│   │   └── bulletinController.js
+│   ├── routes/
+│   │   ├── etudiantRoutes.js
+│   │   ├── enseignantRoutes.js
+│   │   ├── matiereRoutes.js
+│   │   ├── noteRoutes.js
+│   │   └── index.js
+│   ├── middlewares/
+│   │   ├── errorHandler.js
+│   │   └── validator.js
+│   └── app.js
+├── .env
+├── .gitignore
+├── package.json
+├── server.js
+└── .sequelizerc
+
