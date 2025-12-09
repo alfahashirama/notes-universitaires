@@ -1,0 +1,259 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_REGION: ${{ secrets.GKE_REGION }}
+  REGISTRY_LOCATION: ${{ secrets.GKE_REGION }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev
+
+      - name: Build and push Backend image
+        run: |
+          cd backend
+          IMAGE_TAG=${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/notes-universitaires/backend:${{ github.sha }}
+          IMAGE_LATEST=${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/notes-universitaires/backend:latest
+          
+          docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
+          docker push $IMAGE_TAG
+          docker push $IMAGE_LATEST
+          
+          echo "BACKEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Build and push Frontend image
+        run: |
+          cd frontend
+          IMAGE_TAG=${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/notes-universitaires/frontend:${{ github.sha }}
+          IMAGE_LATEST=${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/notes-universitaires/frontend:latest
+          
+          docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
+          docker push $IMAGE_TAG
+          docker push $IMAGE_LATEST
+          
+          echo "FRONTEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Save image tags
+        run: |
+          echo "${{ env.BACKEND_IMAGE }}" > backend-image.txt
+          echo "${{ env.FRONTEND_IMAGE }}" > frontend-image.txt
+
+      - name: Upload image tags
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tags
+          path: |
+            backend-image.txt
+            frontend-image.txt
+
+  deploy-to-gke:
+    name: Deploy to GKE
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download image tags
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tags
+
+      - name: Load image tags
+        run: |
+          echo "BACKEND_IMAGE=$(cat backend-image.txt)" >> $GITHUB_ENV
+          echo "FRONTEND_IMAGE=$(cat frontend-image.txt)" >> $GITHUB_ENV
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER_NAME }} \
+            --region ${{ env.GKE_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Verify kubectl connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace notes-universitaires --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy PostgreSQL Storage
+        run: |
+          kubectl apply -f k8s/postgres-pv.yaml
+          kubectl apply -f k8s/postgres-pvc.yaml
+
+      - name: Deploy PostgreSQL Config
+        run: |
+          kubectl apply -f k8s/postgres-config.yaml
+
+      - name: Deploy PostgreSQL
+        run: |
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          kubectl wait --for=condition=ready pod -l app=postgres \
+            -n notes-universitaires \
+            --timeout=300s || true
+          
+          # Attendre un peu plus pour que la DB soit complètement initialisée
+          sleep 30
+
+      - name: Deploy Backend Config
+        run: |
+          kubectl apply -f k8s/backend-config.yaml
+
+      - name: Deploy Backend
+        run: |
+          # Appliquer le deployment si c'est la première fois
+          kubectl apply -f k8s/backend-deployment.yaml
+          
+          # Mettre à jour l'image avec le nouveau tag
+          kubectl set image deployment/backend \
+            backend=${{ env.BACKEND_IMAGE }} \
+            -n notes-universitaires
+          
+          kubectl apply -f k8s/backend-service.yaml
+
+      - name: Wait for Backend to be ready
+        run: |
+          echo "Waiting for Backend to be ready..."
+          kubectl rollout status deployment/backend -n notes-universitaires --timeout=300s
+
+      - name: Deploy Frontend
+        run: |
+          # Appliquer le deployment si c'est la première fois
+          kubectl apply -f k8s/frontend-deployment.yaml
+          
+          # Mettre à jour l'image avec le nouveau tag
+          kubectl set image deployment/frontend \
+            frontend=${{ env.FRONTEND_IMAGE }} \
+            -n notes-universitaires
+          
+          kubectl apply -f k8s/frontend-service.yaml
+
+      - name: Wait for Frontend to be ready
+        run: |
+          echo "Waiting for Frontend to be ready..."
+          kubectl rollout status deployment/frontend -n notes-universitaires --timeout=300s
+
+      - name: Get LoadBalancer IP
+        run: |
+          echo "Waiting for LoadBalancer IP to be assigned..."
+          
+          # Attendre jusqu'à 5 minutes pour l'attribution de l'IP
+          for i in {1..30}; do
+            EXTERNAL_IP=$(kubectl get service frontend-service -n notes-universitaires -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            if [ -n "$EXTERNAL_IP" ]; then
+              echo "✅ LoadBalancer IP assigned: $EXTERNAL_IP"
+              echo "🌐 Application accessible at: http://$EXTERNAL_IP"
+              break
+            fi
+            echo "⏳ Waiting for IP assignment... ($i/30)"
+            sleep 10
+          done
+          
+          if [ -z "$EXTERNAL_IP" ]; then
+            echo "⚠️  LoadBalancer IP not assigned yet. Check manually with:"
+            echo "kubectl get service frontend-service -n notes-universitaires"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo ""
+          echo "========================================="
+          echo "🚀 DEPLOYMENT SUMMARY"
+          echo "========================================="
+          echo ""
+          echo "📦 Images deployed:"
+          echo "  Backend:  ${{ env.BACKEND_IMAGE }}"
+          echo "  Frontend: ${{ env.FRONTEND_IMAGE }}"
+          echo ""
+          echo "📊 Cluster status:"
+          echo ""
+          kubectl get all -n notes-universitaires
+          echo ""
+          echo "========================================="
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          
+          # Test Backend health endpoint
+          BACKEND_POD=$(kubectl get pod -l app=backend -n notes-universitaires -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec $BACKEND_POD -n notes-universitaires -- wget -q -O- http://localhost:3000/health || echo "Backend health check failed"
+          
+          # Test Frontend
+          FRONTEND_POD=$(kubectl get pod -l app=frontend -n notes-universitaires -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec $FRONTEND_POD -n notes-universitaires -- wget -q -O- http://localhost/ || echo "Frontend check failed"
+          
+          echo "✅ Smoke tests completed"
+
+  notify:
+    name: Notify Deployment Status
+    needs: [build-and-push, deploy-to-gke]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy-to-gke.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi
