@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: notes-universitaires
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "gestion_notes_db"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secret
+  namespace: notes-universitaires
+type: Opaque
+stringData:
+  DB_USER: postgres
+  DB_PASSWORD: VotreMotDePasseSecurise123!
+  JWT_SECRET: votre_secret_jwt_super_securise_production_2024
+  JWT_EXPIRE: "7d"
